@@ -91,7 +91,7 @@
              fill="#050d1a" fill-opacity="0.62"/>
   </g>
 
-  <!-- ==================== 2. TRANSLUCENT NVIDIA GPU & LIVE TELEMETRY GRAPH ==================== -->
+  <!-- ==================== 2. TRANSLUCENT DUAL-FAN GPU & LIVE TELEMETRY GRAPH ==================== -->
   <g transform="translate(96, 56)">
     <!-- Holographic Telemetry Graph Screen Rising Above the GPU -->
     <rect x="34" y="14" width="256" height="106" rx="10"

@@ -4,14 +4,14 @@
   <img src="gpupanel.svg" alt="GPUpanel Logo" width="160" height="160">
 </p>
 
-A fast, modern **NVIDIA GPU Resource Graph Workstation**, **Cinnamon Panel Bar Applet**, and **Cinnamon Desktop Graph Desklet** with **Retina Vision** (HiDPI subpixel anti-aliased Cairo oscilloscopes), **6x Radial Neon Gauges**, **Active GPU Process & VRAM Inspector**, and **Direct NVML (`libnvidia-ml.so.1`) Telemetry**, built natively for **Linux Mint Cinnamon** in the **PythonPanel Dark Neon** aesthetic.
+A fast, modern **GPU Resource Graph Workstation**, **Cinnamon Panel Bar Applet**, and **Cinnamon Desktop Graph Desklet** with **Retina Vision** (HiDPI subpixel anti-aliased Cairo oscilloscopes), **6x Radial Neon Gauges**, **Active GPU Process & VRAM Inspector**, and **Direct Low-Overhead Hardware Telemetry**, built natively for **Linux Mint Cinnamon** in the **PythonPanel Dark Neon** aesthetic.
 
 ---
 
 ## Key Features
 
-### 1. Direct NVML Hardware Telemetry (`libnvidia-ml.so.1`)
-- **Zero-Subprocess Overhead**: Queries `libnvidia-ml.so.1` directly via `ctypes` at up to **4 Hz (250 ms)** with automatic fallback to `nvidia-smi` or synthetic simulation.
+### 1. Direct Low-Overhead Hardware Telemetry
+- **Zero-Subprocess Overhead**: Queries the GPU management library directly via `ctypes` at up to **4 Hz (250 ms)** with automatic fallback to CLI sensor polling or synthetic simulation.
 - **Comprehensive Real-Time Channels**:
   - **GPU Core (SM) Load (`%`)** & **Memory Controller Bus Load (`%`)**
   - **VRAM Allocation (`MiB`, `GiB`, `%`)** with per-process segmented breakdown
@@ -19,7 +19,7 @@ A fast, modern **NVIDIA GPU Resource Graph Workstation**, **Cinnamon Panel Bar A
   - **Board Power Draw (`W`)** vs TDP Power Limit (`W` & `%`)
   - **Graphics / SM Boost Clocks (`MHz`)** & **Memory Clocks (`MHz`)**
   - **PCIe Link Generation, Width (`Gen4 x16`), & Live TX/RX Bandwidth (`MB/s`)**
-  - **Video Encoder (`NVENC %`) & Decoder (`NVDEC %`)** utilization
+  - **Video Encoder (`ENC %`) & Decoder (`DEC %`)** utilization
   - **Performance State (`P0`..`P8`)** badge
 
 ### 2. Retina Vision Cairo Oscilloscopes & Radial Neon Gauges
@@ -36,9 +36,9 @@ A fast, modern **NVIDIA GPU Resource Graph Workstation**, **Cinnamon Panel Bar A
 - **Cinnamon Panel Bar Applet (`gpupanel@cinnamon`)**:
   - Installed into `~/.local/share/cinnamon/applets/gpupanel@cinnamon`.
   - Renders a live mini Cairo graph (`GPU%` + `VRAM%`) directly inside your Cinnamon panel bar alongside live `GPU% · VRAM · Temp°C` readouts and a Dark Neon popup oscilloscope menu.
-- **Cinnamon Desktop Graph Desklet (`gpupanel@cinnamon`)**:
-  - Installed into `~/.local/share/cinnamon/desklets/gpupanel@cinnamon`.
-  - Renders a live PythonPanel Dark Neon GPU resource graph widget directly on your desktop wallpaper; click it anytime to launch the full **GPUpanel** app.
+- **Cinnamon Desktop Graph Desklet (`gpupanel-desklet@cinnamon`)**:
+  - Installed into `~/.local/share/cinnamon/desklets/gpupanel-desklet@cinnamon`.
+  - Renders a live PythonPanel Dark Neon GPU resource graph widget directly on your desktop wallpaper; drag its bottom-right corner grip (`◢`) or use `Ctrl + Scroll Wheel` to resize it freely, and click it anytime to launch the full **GPUpanel** app.
 - **Compact Floating Mini HUD (`F10` or `gpupanel --hud`)**:
   - Converts the GPUpanel window into an always-on-top compact floating HUD oscilloscope.
 
@@ -55,7 +55,7 @@ The installer automatically:
 - Installs the vector icon (`gpupanel.svg`) and multi-size PNG icons into `~/.local/share/icons/hicolor/`.
 - Creates the `~/.local/bin/gpupanel` CLI command and `~/.local/share/applications/gpupanel.desktop` launcher.
 - Pins **GPUpanel** to Cinnamon Favorites and the `grouped-window-list` panel taskbar.
-- Installs and enables both the **Cinnamon Panel Applet** (`gpupanel@cinnamon`) and **Cinnamon Desktop Graph Desklet** (`gpupanel@cinnamon`).
+- Installs and enables both the **Cinnamon Panel Applet** (`gpupanel@cinnamon`) and **Cinnamon Desktop Graph Desklet** (`gpupanel-desklet@cinnamon`).
 
 ---
 

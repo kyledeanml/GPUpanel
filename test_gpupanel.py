@@ -14,7 +14,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
-from gpu_telemetry import NvidiaTelemetryEngine, GpuHistoryBuffer, METRIC_CHANNELS
+from gpu_telemetry import GpuTelemetryEngine, GpuHistoryBuffer, METRIC_CHANNELS
 from gpu_graphs import GpuGaugeCard, GpuResourceGraph, VramAllocationBar
 from cinnamon_manager import CinnamonAppletManager
 
@@ -22,7 +22,7 @@ from cinnamon_manager import CinnamonAppletManager
 class TestGpuPanel(unittest.TestCase):
 
     def test_telemetry_engine_poll(self):
-        engine = NvidiaTelemetryEngine()
+        engine = GpuTelemetryEngine()
         self.assertGreaterEqual(engine.get_device_count(), 1)
         spec = engine.get_device_spec(0)
         self.assertTrue(len(spec.name) > 0)
@@ -37,7 +37,7 @@ class TestGpuPanel(unittest.TestCase):
         engine.shutdown()
 
     def test_history_buffer_and_exports(self):
-        engine = NvidiaTelemetryEngine()
+        engine = GpuTelemetryEngine()
         buf = GpuHistoryBuffer(max_points=60)
         for _ in range(5):
             buf.push(engine.poll(0, include_processes=False))
@@ -65,7 +65,7 @@ class TestGpuPanel(unittest.TestCase):
 
     def test_cairo_graph_widgets(self):
         buf = GpuHistoryBuffer(max_points=60)
-        engine = NvidiaTelemetryEngine()
+        engine = GpuTelemetryEngine()
         snap = engine.poll(0)
         buf.push(snap)
         engine.shutdown()

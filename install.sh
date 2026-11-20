@@ -10,7 +10,7 @@ DESKLETS_DIR="$HOME/.local/share/cinnamon/desklets"
 
 echo "=========================================================="
 echo " Installing GPUpanel for Linux Mint Cinnamon"
-echo " (NVIDIA GPU Resource Graph App + Panel Applet + Desklet)"
+echo " (GPU Resource Graph App + Panel Applet + Desklet)"
 echo "=========================================================="
 
 chmod +x "$DIR/run.sh" "$DIR/gpupanel.py" "$DIR/gpu_telemetry.py" "$DIR/gpu_graphs.py" "$DIR/cinnamon_manager.py"
@@ -45,8 +45,8 @@ echo "[+] Created CLI executable link: $BIN_DIR/gpupanel"
 cat <<EOF > "$APP_DIR/gpupanel.desktop"
 [Desktop Entry]
 Name=GPUpanel
-Comment=NVIDIA GPU resource graph workstation, Cinnamon panel applet, and desktop graph desklet in PythonPanel neon style
-GenericName=NVIDIA GPU Resource Monitor
+Comment=GPU resource graph workstation, Cinnamon panel applet, and desktop graph desklet in PythonPanel neon style
+GenericName=GPU Resource Monitor
 Exec=$DIR/run.sh %F
 Icon=$ICONS_DIR/gpupanel.svg
 Terminal=false
@@ -54,7 +54,7 @@ Type=Application
 Categories=GTK;GNOME;System;Monitor;HardwareSettings;Utility;
 StartupNotify=true
 StartupWMClass=gpupanel
-Keywords=nvidia;gpu;cuda;vram;graph;telemetry;monitor;applet;desklet;gpupanel;rtx;
+Keywords=gpu;cuda;vram;graph;telemetry;monitor;applet;desklet;gpupanel;rtx;
 Actions=MiniHUD;NewWindow;
 
 [Desktop Action MiniHUD]

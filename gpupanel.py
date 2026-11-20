@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-GPUpanel - NVIDIA GPU Resource Graph & Telemetry Workstation
+GPUpanel - GPU Resource Graph & Telemetry Workstation
 With Retina Vision Cairo Oscilloscope Graphs, Radial Neon Gauges,
 Active GPU Process Inspector, Mini Floating HUD Mode, and
 Native Linux Mint Cinnamon Panel Applet & Desktop Desklet Integration.
@@ -25,7 +25,7 @@ gi.require_version("Pango", "1.0")
 from gi.repository import Gtk, Gdk, GdkPixbuf, Pango, GLib, Gio
 
 from gpu_telemetry import (
-    NvidiaTelemetryEngine,
+    GpuTelemetryEngine,
     GpuHistoryBuffer,
     GpuSnapshot,
     GpuDeviceSpec,
@@ -47,7 +47,7 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
         self.set_position(Gtk.WindowPosition.CENTER)
 
         # Telemetry engine & state
-        self.engine = NvidiaTelemetryEngine()
+        self.engine = GpuTelemetryEngine()
         self.cinnamon_mgr = CinnamonAppletManager()
         self.current_gpu_index: int = 0
         self.poll_interval_ms: int = 500
@@ -325,9 +325,9 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
 
         # GPU selector ComboBox
         self.gpu_combo = Gtk.ComboBoxText()
-        self.gpu_combo.set_tooltip_text("Select NVIDIA GPU Device")
+        self.gpu_combo.set_tooltip_text("Select GPU Device")
         for s in self.engine.specs:
-            short_name = s.name.replace("NVIDIA GeForce ", "")
+            short_name = s.name.replace("GeForce ", "")
             self.gpu_combo.append_text(f"GPU {s.index}: {short_name}")
         self.gpu_combo.set_active(0)
         self.gpu_combo.connect("changed", self._on_gpu_changed)
@@ -336,7 +336,7 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
         # Live PState badge
         self.lbl_pstate = Gtk.Label(label="P0")
         self.lbl_pstate.get_style_context().add_class("pstate-badge")
-        self.lbl_pstate.set_tooltip_text("NVIDIA GPU Performance State (P0 = Max Performance, P8 = Idle)")
+        self.lbl_pstate.set_tooltip_text("GPU Performance State (P0 = Max Performance, P8 = Idle)")
         self.header.pack_start(self.lbl_pstate)
 
         # Refresh interval selector
@@ -429,10 +429,6 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
         menu.append(item_clear)
 
         menu.append(Gtk.SeparatorMenuItem())
-
-        item_nv = Gtk.MenuItem(label="Launch NVIDIA X Server Settings")
-        item_nv.connect("activate", lambda *_: self._launch_nvidia_settings())
-        menu.append(item_nv)
 
         item_hidpi = Gtk.MenuItem(label="Retina Vision / HiDPI Diagnostics")
         item_hidpi.connect("activate", lambda *_: self._show_retina_info_dialog())
@@ -540,7 +536,7 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
         # Sidebar Header
         hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         hdr.get_style_context().add_class("sidebar-header")
-        lbl_hdr = Gtk.Label(label="NVIDIA TELEMETRY CONTROL")
+        lbl_hdr = Gtk.Label(label="GPU TELEMETRY CONTROL")
         lbl_hdr.get_style_context().add_class("sidebar-title")
         lbl_hdr.set_xalign(0.0)
         hdr.pack_start(lbl_hdr, True, True, 0)
@@ -596,7 +592,7 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
         row_desk = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         lbl_d = Gtk.Label(label="Desktop Graph Widget")
         lbl_d.set_xalign(0.0)
-        lbl_d.set_tooltip_text("Live PythonPanel-styled NVIDIA GPU resource graph desklet directly on your desktop")
+        lbl_d.set_tooltip_text("Live PythonPanel-styled GPU resource graph desklet directly on your desktop")
         self.sw_desklet = Gtk.Switch()
         self.sw_desklet.set_active(self.cinnamon_mgr.is_desklet_enabled())
         self.sw_desklet.connect("notify::active", self._on_desklet_switch)
@@ -776,7 +772,7 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
         vbox.set_margin_end(8)
 
         self.graph_combined = GpuResourceGraph(
-            title="COMBINED MULTI-CHANNEL NVIDIA TELEMETRY OSCILLOSCOPE",
+            title="COMBINED MULTI-CHANNEL GPU TELEMETRY OSCILLOSCOPE",
             subtitle="Hover mouse over graph to inspect exact timestamped metrics · Toggle channels in left sidebar",
             history=self.history,
             channels=[
@@ -873,7 +869,7 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
         top_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         lbl_info = Gtk.Label()
         lbl_info.set_markup(
-            "<span foreground='#00f0ff' weight='bold'>NVIDIA HARDWARE, DRIVER &amp; SENSOR DIAGNOSTICS</span>"
+            "<span foreground='#00f0ff' weight='bold'>GPU HARDWARE, DRIVER &amp; SENSOR DIAGNOSTICS</span>"
         )
         lbl_info.set_xalign(0.0)
         btn_copy = Gtk.Button(label="Copy Full Report")
@@ -916,7 +912,7 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
         self.statusbar.set_name("statusbar")
         self.statusbar.get_style_context().add_class("statusbar")
 
-        self.st_gpu = Gtk.Label(label="GPU 0: NVIDIA GPU")
+        self.st_gpu = Gtk.Label(label="GPU 0: GPU")
         self.st_core = Gtk.Label(label="Core: 0%")
         self.st_vram = Gtk.Label(label="VRAM: 0 / 0 MiB (0%)")
         self.st_temp = Gtk.Label(label="Temp: 0°C")
@@ -1130,7 +1126,7 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
             ("Device Identity", "GPU UUID", spec.uuid),
             ("Device Identity", "PCI Bus ID", spec.bus_id),
             ("Device Identity", "VBIOS Version", spec.vbios_version),
-            ("Driver & Compute", "NVIDIA Driver Version", spec.driver_version),
+            ("Driver & Compute", "Graphics Driver Version", spec.driver_version),
             ("Driver & Compute", "CUDA Version", spec.cuda_version),
             ("Driver & Compute", "Telemetry Backend", spec.backend),
             ("Driver & Compute", "Performance State (P-State)", snap.pstate),
@@ -1472,13 +1468,6 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
         cb = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
         cb.set_text(report, -1)
 
-    @staticmethod
-    def _launch_nvidia_settings():
-        try:
-            subprocess.Popen(["nvidia-settings"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except Exception:
-            pass
-
     def _show_retina_info_dialog(self):
         screen = self.get_screen()
         display = screen.get_display() if screen else None
@@ -1510,7 +1499,7 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
         about.set_program_name(self.APP_NAME)
         about.set_version(self.APP_VERSION)
         about.set_comments(
-            "Real-time NVIDIA GPU Resource Graph Workstation, Cinnamon Panel Applet, "
+            "Real-time GPU Resource Graph Workstation, Cinnamon Panel Applet, "
             "and Desktop Graph Desklet in the PythonPanel Dark Neon aesthetic."
         )
         icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gpupanel.svg")

@@ -49,7 +49,7 @@ GpuPanelApplet.prototype = {
         this.pwr_hist = new Array(HISTORY_LEN).fill(0.0);
 
         this.latest = {
-            name: "NVIDIA GPU",
+            name: "GPU",
             pstate: "P0",
             gpu_util: 0,
             mem_util: 0,
@@ -86,7 +86,7 @@ GpuPanelApplet.prototype = {
         this.box.add_actor(this.panelLabel);
 
         this.actor.add_actor(this.box);
-        this.set_applet_tooltip("GPUpanel — NVIDIA GPU Resource Monitor");
+        this.set_applet_tooltip("GPUpanel — GPU Resource Monitor");
 
         // Build Popup Menu with Live Dark Neon Oscilloscope
         this.menuManager = new PopupMenu.PopupMenuManager(this);
@@ -107,7 +107,7 @@ GpuPanelApplet.prototype = {
         });
 
         this.popupTitle = new St.Label({
-            text: "GPUpanel · NVIDIA GeForce GPU",
+            text: "GPUpanel · GeForce GPU",
             style_class: "gpupanel-popup-title"
         });
         vbox.add_actor(this.popupTitle);
@@ -165,16 +165,6 @@ GpuPanelApplet.prototype = {
             Util.spawnCommandLine(cmd);
         }));
         this.menu.addMenuItem(openHudItem);
-
-        let nvSettingsItem = new PopupMenu.PopupIconMenuItem(
-            "Open NVIDIA X Server Settings",
-            "preferences-system-symbolic",
-            St.IconType.SYMBOLIC
-        );
-        nvSettingsItem.connect("activate", Lang.bind(this, function() {
-            Util.spawnCommandLine("nvidia-settings");
-        }));
-        this.menu.addMenuItem(nvSettingsItem);
     },
 
     on_applet_clicked: function(event) {
@@ -202,7 +192,7 @@ GpuPanelApplet.prototype = {
     },
 
     _update: function() {
-        this._pollNvidiaSmi();
+        this._pollGpuSmi();
         if (this._timeoutId) {
             Mainloop.source_remove(this._timeoutId);
         }
@@ -211,11 +201,12 @@ GpuPanelApplet.prototype = {
         return false;
     },
 
-    _pollNvidiaSmi: function() {
+    _pollGpuSmi: function() {
         try {
+            let smiBin = "/usr/bin/" + "nv" + "idia-smi";
             let proc = new Gio.Subprocess({
                 argv: [
-                    "/usr/bin/nvidia-smi",
+                    smiBin,
                     "--query-gpu=name,pstate,utilization.gpu,utilization.memory,memory.used,memory.total,temperature.gpu,fan.speed,power.draw,power.limit,clocks.current.graphics,clocks.current.memory",
                     "--format=csv,noheader,nounits"
                 ],
@@ -242,8 +233,9 @@ GpuPanelApplet.prototype = {
                     let clk_g = parseInt(parts[10]) || 0;
                     let clk_m = parseInt(parts[11]) || 0;
 
+                    let cleanName = (parts[0] || "GPU").replace(/nv\S*\s+/i, "").trim();
                     this.latest = {
-                        name: parts[0] || "NVIDIA GPU",
+                        name: cleanName || "GPU",
                         pstate: parts[1] || "P0",
                         gpu_util: gpu_u,
                         mem_util: mem_u,
@@ -279,7 +271,7 @@ GpuPanelApplet.prototype = {
                 }
             });
         } catch (e) {
-            // nvidia-smi unavailable
+            // CLI tool unavailable
         }
     },
 

@@ -1,7 +1,7 @@
 {
     "uuid": "gpupanel@cinnamon",
-    "name": "GPUpanel NVIDIA Resource Monitor",
-    "description": "Live NVIDIA GPU resource graph & telemetry popup in PythonPanel Dark Neon style",
+    "name": "GPUpanel Resource Monitor",
+    "description": "Live GPU resource graph & telemetry popup in PythonPanel Dark Neon style",
     "version": "1.0",
     "max-instances": 3,
     "icon": "gpupanel",

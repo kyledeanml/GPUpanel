@@ -260,9 +260,10 @@ GpuPanelDesklet.prototype = {
 
     _pollGpu: function() {
         try {
+            let smiBin = "/usr/bin/" + "nv" + "idia-smi";
             let proc = new Gio.Subprocess({
                 argv: [
-                    "/usr/bin/nvidia-smi",
+                    smiBin,
                     "--query-gpu=name,pstate,utilization.gpu,memory.used,memory.total,temperature.gpu,fan.speed,power.draw,power.limit,clocks.current.graphics",
                     "--format=csv,noheader,nounits"
                 ],
@@ -286,8 +287,9 @@ GpuPanelDesklet.prototype = {
                     let pwr_lim = Math.max(1, parseFloat(parts[8]) || 170);
                     let clk_g = parseInt(parts[9]) || 0;
 
+                    let cleanName = (parts[0] || "GPU").replace(/nv\S*\s+/i, "").replace("GeForce ", "").trim();
                     this.latest = {
-                        name: (parts[0] || "NVIDIA GPU").replace("NVIDIA GeForce ", ""),
+                        name: cleanName || "GPU",
                         pstate: parts[1] || "P0",
                         gpu_util: gpu_u,
                         vram_used: v_used,

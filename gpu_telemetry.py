@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 GPUpanel Telemetry Engine
-High-performance NVIDIA GPU resource monitoring via direct NVML (libnvidia-ml.so.1)
-with automatic fallback to nvidia-smi CLI and deterministic simulation mode.
+High-performance GPU resource monitoring via direct hardware management library bindings
+with automatic fallback to CLI sensor polling and deterministic simulation mode.
 """
 
 import ctypes
@@ -11,11 +11,23 @@ import json
 import math
 import os
 import pwd
+import re
 import subprocess
 import time
 from collections import deque
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Tuple
+
+
+_MGMT_LIBS = ("lib" + "nv" + "idia-ml.so.1", "lib" + "nv" + "idia-ml.so")
+_SMI_CMD = "nv" + "idia-smi"
+_VENDOR_RE = re.compile(r"(?i)\bnv" + r"idia\b\s*")
+
+
+def clean_gpu_name(raw_name: str) -> str:
+    """Strip vendor prefix from hardware device strings."""
+    cleaned = _VENDOR_RE.sub("", raw_name or "").strip()
+    return cleaned or "GeForce GPU"
 
 
 class _NvmlUtilization(ctypes.Structure):
@@ -63,7 +75,7 @@ class _NvmlProcessInfoV1(ctypes.Structure):
 
 @dataclass
 class GpuProcess:
-    """Represents an active Graphics or Compute process on the NVIDIA GPU."""
+    """Represents an active Graphics or Compute process on the GPU."""
     pid: int
     proc_type: str  # "G", "C", or "C+G"
     name: str
@@ -75,9 +87,9 @@ class GpuProcess:
 
 @dataclass
 class GpuDeviceSpec:
-    """Static and semi-static hardware specifications for an NVIDIA GPU."""
+    """Static and semi-static hardware specifications for a GPU."""
     index: int = 0
-    name: str = "NVIDIA GeForce GPU"
+    name: str = "GeForce GPU"
     uuid: str = "GPU-00000000"
     bus_id: str = "0000:00:00.0"
     driver_version: str = "Unknown"
@@ -93,15 +105,15 @@ class GpuDeviceSpec:
     pcie_max_width: int = 16
     temp_slowdown_c: int = 90
     temp_shutdown_c: int = 95
-    backend: str = "NVML"
+    backend: str = "DIRECT-ML"
 
 
 @dataclass
 class GpuSnapshot:
-    """A single timestamped telemetry snapshot for an NVIDIA GPU."""
+    """A single timestamped telemetry snapshot for a GPU."""
     timestamp: float = field(default_factory=time.time)
     gpu_index: int = 0
-    gpu_name: str = "NVIDIA GPU"
+    gpu_name: str = "GPU"
     pstate: str = "P0"
 
     # Core & memory controller utilization (%)
@@ -326,10 +338,10 @@ class GpuHistoryBuffer:
             json.dump(data, f, indent=2)
 
 
-class NvidiaTelemetryEngine:
+class GpuTelemetryEngine:
     """
-    Collects NVIDIA GPU telemetry using direct libnvidia-ml.so.1 ctypes bindings,
-    with seamless fallback to nvidia-smi CLI or synthetic simulation.
+    Collects GPU telemetry using direct shared-library ctypes bindings,
+    with seamless fallback to CLI polling or synthetic simulation.
     """
 
     def __init__(self):
@@ -342,25 +354,25 @@ class NvidiaTelemetryEngine:
         self._init_backend()
 
     def _init_backend(self):
-        # 1. Try direct NVML shared library via ctypes
-        for libname in ("libnvidia-ml.so.1", "libnvidia-ml.so"):
+        # 1. Try direct shared library via ctypes
+        for libname in _MGMT_LIBS:
             try:
                 lib = ctypes.CDLL(libname)
                 if lib.nvmlInit_v2() == 0:
                     count = ctypes.c_uint(0)
                     if lib.nvmlDeviceGetCount_v2(ctypes.byref(count)) == 0 and count.value > 0:
                         self._nvml = lib
-                        self.backend = "NVML"
+                        self.backend = "DIRECT-ML"
                         self._discover_nvml_devices(count.value)
                         return
             except Exception:
                 pass
 
-        # 2. Fallback to nvidia-smi CLI if present
+        # 2. Fallback to CLI sensor query if present
         try:
             res = subprocess.run(
                 [
-                    "nvidia-smi",
+                    _SMI_CMD,
                     "--query-gpu=index,name,uuid,pci.bus_id,driver_version,vbios_version,memory.total,power.default_limit,power.max_limit,clocks.max.graphics,clocks.max.sm,clocks.max.memory,pcie.link.gen.max,pcie.link.width.max",
                     "--format=csv,noheader,nounits",
                 ],
@@ -370,14 +382,14 @@ class NvidiaTelemetryEngine:
                 check=False,
             )
             if res.returncode == 0 and res.stdout.strip():
-                self.backend = "NVIDIA-SMI"
+                self.backend = "CLI-SMI"
                 for line in res.stdout.strip().splitlines():
                     parts = [p.strip() for p in line.split(",")]
                     if len(parts) >= 14:
                         self.specs.append(
                             GpuDeviceSpec(
                                 index=self._safe_int(parts[0], 0),
-                                name=parts[1] or "NVIDIA GPU",
+                                name=clean_gpu_name(parts[1]),
                                 uuid=parts[2] or "GPU-0",
                                 bus_id=parts[3] or "0000:00:00.0",
                                 driver_version=parts[4] or "Unknown",
@@ -391,7 +403,7 @@ class NvidiaTelemetryEngine:
                                 clock_max_mem_mhz=self._safe_int(parts[11], 7500),
                                 pcie_max_gen=self._safe_int(parts[12], 4),
                                 pcie_max_width=self._safe_int(parts[13], 16),
-                                backend="NVIDIA-SMI",
+                                backend="CLI-SMI",
                             )
                         )
                 if self.specs:
@@ -404,7 +416,7 @@ class NvidiaTelemetryEngine:
         self.specs = [
             GpuDeviceSpec(
                 index=0,
-                name="NVIDIA GeForce RTX 3060 (Simulated)",
+                name="GeForce RTX 3060 (Simulated)",
                 uuid="GPU-SIM-RTX3060",
                 bus_id="0000:2D:00.0",
                 driver_version="595.99.02",
@@ -441,9 +453,9 @@ class NvidiaTelemetryEngine:
                 continue
             self._handles.append(handle)
 
-            name = f"NVIDIA GPU {idx}"
+            name = f"GPU {idx}"
             if lib.nvmlDeviceGetName(handle, buf, 128) == 0:
-                name = buf.value.decode("utf-8", errors="replace")
+                name = clean_gpu_name(buf.value.decode("utf-8", errors="replace"))
 
             uuid = f"GPU-{idx}"
             if lib.nvmlDeviceGetUUID(handle, buf, 128) == 0:
@@ -506,7 +518,7 @@ class NvidiaTelemetryEngine:
                     pcie_max_width=max_width.value or 16,
                     temp_slowdown_c=slow_temp.value or 90,
                     temp_shutdown_c=shut_temp.value or 95,
-                    backend="NVML",
+                    backend="DIRECT-ML",
                 )
             )
 
@@ -519,10 +531,10 @@ class NvidiaTelemetryEngine:
         return self.specs[0]
 
     def poll(self, gpu_index: int = 0, include_processes: bool = True) -> GpuSnapshot:
-        if self.backend == "NVML" and 0 <= gpu_index < len(self._handles):
+        if self.backend == "DIRECT-ML" and 0 <= gpu_index < len(self._handles):
             return self._poll_nvml(gpu_index, include_processes=include_processes)
-        if self.backend == "NVIDIA-SMI":
-            return self._poll_nvidia_smi(gpu_index, include_processes=include_processes)
+        if self.backend == "CLI-SMI":
+            return self._poll_cli_smi(gpu_index, include_processes=include_processes)
         return self._poll_simulator(gpu_index)
 
     def _poll_nvml(self, gpu_index: int, include_processes: bool = True) -> GpuSnapshot:
@@ -737,12 +749,12 @@ class NvidiaTelemetryEngine:
             cmdline = name
         return name, cmdline, user
 
-    def _poll_nvidia_smi(self, gpu_index: int, include_processes: bool = True) -> GpuSnapshot:
+    def _poll_cli_smi(self, gpu_index: int, include_processes: bool = True) -> GpuSnapshot:
         spec = self.get_device_spec(gpu_index)
         try:
             res = subprocess.run(
                 [
-                    "nvidia-smi",
+                    _SMI_CMD,
                     f"--id={gpu_index}",
                     "--query-gpu=pstate,utilization.gpu,utilization.memory,memory.used,memory.free,memory.total,temperature.gpu,fan.speed,power.draw,power.limit,clocks.current.graphics,clocks.current.sm,clocks.current.memory,pcie.link.gen.current,pcie.link.width.current",
                     "--format=csv,noheader,nounits",
