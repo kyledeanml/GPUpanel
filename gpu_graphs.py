@@ -50,7 +50,8 @@ class GpuGaugeCard(Gtk.DrawingArea):
         self.connect("draw", self._on_draw)
 
     def set_zoom_scale(self, scale: float):
-        self.zoom_scale = max(0.75, min(2.0, scale))
+        val = float(scale) if math.isfinite(float(scale)) else 1.0
+        self.zoom_scale = max(0.75, min(2.0, val))
         self.queue_draw()
 
     def update_State(
@@ -61,12 +62,16 @@ class GpuGaugeCard(Gtk.DrawingArea):
         peak_text: str,
         spark_values: List[float],
     ):
-        self.pct = max(0.0, min(100.0, pct))
-        self.primary_text = primary_text
-        self.secondary_text = secondary_text
-        self.peak_text = peak_text
+        safe_pct = float(pct) if math.isfinite(float(pct)) else 0.0
+        self.pct = max(0.0, min(100.0, safe_pct))
+        self.primary_text = str(primary_text or "")
+        self.secondary_text = str(secondary_text or "")
+        self.peak_text = str(peak_text or "")
         if spark_values:
-            self.spark_values = spark_values[-48:]
+            self.spark_values = [
+                max(0.0, min(1.0, float(v))) if math.isfinite(float(v)) else 0.0
+                for v in spark_values[-48:]
+            ]
         self.queue_draw()
 
     def _on_draw(self, _widget, cr: cairo.Context):

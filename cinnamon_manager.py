@@ -9,7 +9,9 @@ import glob
 import json
 import os
 import shutil
+import stat
 import subprocess
+import tempfile
 from typing import Dict, Optional
 
 import gi
@@ -162,23 +164,53 @@ class CinnamonAppletManager:
         except Exception:
             return False
 
+    @staticmethod
+    def _atomic_write_json(cfg_path: str, data: dict) -> None:
+        if not cfg_path or "\x00" in cfg_path:
+            raise ValueError("Invalid JSON config path.")
+        abs_path = os.path.abspath(cfg_path)
+        st = os.lstat(abs_path)
+        if not stat.S_ISREG(st.st_mode):
+            raise ValueError(f"Refusing to overwrite non-regular config file: {abs_path}")
+        existing_mode = stat.S_IMODE(st.st_mode) & 0o777
+        parent_dir = os.path.dirname(abs_path) or "."
+        fd, tmp_path = tempfile.mkstemp(prefix=".gpupanel_cfg_", suffix=".json", dir=parent_dir)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+            os.chmod(tmp_path, existing_mode)
+            os.replace(tmp_path, abs_path)
+        except Exception:
+            try:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
     def set_desklet_dimensions(self, width: int, height: int) -> bool:
         """Update the GPUpanel desktop desklet width and height in Cinnamon spices config and reload it."""
+        safe_w = max(120, min(1920, int(width)))
+        safe_h = max(80, min(1080, int(height)))
         cfg_dir = os.path.expanduser(f"~/.config/cinnamon/spices/{DESKLET_UUID}")
         updated = False
         if os.path.isdir(cfg_dir):
             for cfg_path in glob.glob(os.path.join(cfg_dir, "*.json")):
                 try:
+                    st = os.lstat(cfg_path)
+                    if not stat.S_ISREG(st.st_mode):
+                        continue
                     with open(cfg_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
+                    if not isinstance(data, dict):
+                        continue
                     if "desklet-width" in data and isinstance(data["desklet-width"], dict):
-                        data["desklet-width"]["value"] = int(width)
+                        data["desklet-width"]["value"] = safe_w
                     if "desklet-height" in data and isinstance(data["desklet-height"], dict):
-                        data["desklet-height"]["value"] = int(height)
+                        data["desklet-height"]["value"] = safe_h
                     if "scale-size" in data and isinstance(data["scale-size"], dict):
                         data["scale-size"]["value"] = 1.0
-                    with open(cfg_path, "w", encoding="utf-8") as f:
-                        json.dump(data, f, indent=4)
+                    self._atomic_write_json(cfg_path, data)
                     updated = True
                 except Exception:
                     pass
@@ -203,13 +235,17 @@ class CinnamonAppletManager:
             os.path.expanduser("~/.config/cinnamon/spices/grouped-window-list@cinnamon.org/*.json")
         ):
             try:
+                st = os.lstat(cfg_path)
+                if not stat.S_ISREG(st.st_mode):
+                    continue
                 with open(cfg_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                if not isinstance(data, dict):
+                    continue
                 pinned = data.get("pinned-apps", {}).get("value")
                 if isinstance(pinned, list) and "gpupanel.desktop" not in pinned:
                     pinned.append("gpupanel.desktop")
-                    with open(cfg_path, "w", encoding="utf-8") as f:
-                        json.dump(data, f, indent=4)
+                    self._atomic_write_json(cfg_path, data)
                 ok = True
             except Exception:
                 pass

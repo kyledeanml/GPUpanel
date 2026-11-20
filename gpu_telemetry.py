@@ -7,12 +7,15 @@ with automatic fallback to CLI sensor polling and deterministic simulation mode.
 
 import ctypes
 import csv
+import io
 import json
 import math
 import os
 import pwd
 import re
+import stat
 import subprocess
+import tempfile
 import time
 from collections import deque
 from dataclasses import dataclass, field, asdict
@@ -22,12 +25,61 @@ from typing import Dict, List, Optional, Tuple
 _MGMT_LIBS = ("lib" + "nv" + "idia-ml.so.1", "lib" + "nv" + "idia-ml.so")
 _SMI_CMD = "nv" + "idia-smi"
 _VENDOR_RE = re.compile(r"(?i)\bnv" + r"idia\b\s*")
+_CTRL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]+")
+_PLAIN_NUM_RE = re.compile(r"^[+-]?\d+(?:\.\d+)?$")
 
 
 def clean_gpu_name(raw_name: str) -> str:
-    """Strip vendor prefix from hardware device strings."""
-    cleaned = _VENDOR_RE.sub("", raw_name or "").strip()
+    """Strip vendor prefix and control characters from hardware device strings."""
+    no_ctrl = _CTRL_CHARS_RE.sub(" ", raw_name or "")
+    cleaned = _VENDOR_RE.sub("", no_ctrl).strip()
     return cleaned or "GeForce GPU"
+
+
+def sanitize_csv_cell(value: object) -> object:
+    """Prevent CSV formula / spreadsheet injection on string cells."""
+    if not isinstance(value, str):
+        return value
+    cleaned = _CTRL_CHARS_RE.sub(" ", value).strip()
+    if cleaned and cleaned[0] in ("=", "+", "-", "@", "\t", "\r") and not _PLAIN_NUM_RE.match(cleaned):
+        return "'" + cleaned
+    return cleaned
+
+
+def _atomic_write_text(filepath: str, content: str) -> str:
+    """Atomically write text to filepath, rejecting directories, FIFOs, and null bytes."""
+    if not filepath or not isinstance(filepath, str) or "\x00" in filepath:
+        raise ValueError("Invalid export file path.")
+    abs_path = os.path.abspath(filepath)
+    existing_mode = None
+    if os.path.exists(abs_path):
+        st = os.stat(abs_path)
+        if stat.S_ISDIR(st.st_mode):
+            raise IsADirectoryError(f"Cannot export telemetry over directory: {abs_path}")
+        if not stat.S_ISREG(st.st_mode):
+            raise ValueError(f"Refusing to overwrite non-regular file: {abs_path}")
+        existing_mode = stat.S_IMODE(st.st_mode) & 0o777
+
+    parent_dir = os.path.dirname(abs_path) or "."
+    os.makedirs(parent_dir, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(
+        prefix=".gpupanel_export_",
+        suffix=os.path.splitext(abs_path)[1] or ".tmp",
+        dir=parent_dir,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            f.write(content)
+        os.chmod(tmp_path, existing_mode if existing_mode is not None else 0o644)
+        os.replace(tmp_path, abs_path)
+    except Exception:
+        try:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+    return abs_path
 
 
 class _NvmlUtilization(ctypes.Structure):
@@ -261,8 +313,10 @@ class GpuHistoryBuffer:
 
     def extract_value(self, snap: GpuSnapshot, key: str) -> float:
         if key == "pcie_total_mbs":
-            return snap.pcie_tx_mbs + snap.pcie_rx_mbs
-        return float(getattr(snap, key, 0.0))
+            val = float(snap.pcie_tx_mbs) + float(snap.pcie_rx_mbs)
+        else:
+            val = float(getattr(snap, key, 0.0))
+        return val if math.isfinite(val) else 0.0
 
     def get_raw_series(self, key: str, count: Optional[int] = None) -> List[float]:
         n = count or self.max_points
@@ -304,38 +358,38 @@ class GpuHistoryBuffer:
             "clock_gfx_mhz", "clock_mem_mhz", "pcie_tx_mbs", "pcie_rx_mbs",
             "enc_util", "dec_util", "process_count"
         ]
-        with open(filepath, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            for s in snaps:
-                writer.writerow({
-                    "timestamp": f"{s.timestamp:.3f}",
-                    "gpu_index": s.gpu_index,
-                    "gpu_name": s.gpu_name,
-                    "pstate": s.pstate,
-                    "gpu_util": f"{s.gpu_util:.1f}",
-                    "mem_ctrl_util": f"{s.mem_ctrl_util:.1f}",
-                    "vram_used_mib": f"{s.vram_used_mib:.1f}",
-                    "vram_total_mib": f"{s.vram_total_mib:.1f}",
-                    "vram_pct": f"{s.vram_pct:.2f}",
-                    "temp_c": f"{s.temp_c:.1f}",
-                    "fan_pct": f"{s.fan_pct:.1f}",
-                    "power_draw_w": f"{s.power_draw_w:.2f}",
-                    "power_limit_w": f"{s.power_limit_w:.2f}",
-                    "power_pct": f"{s.power_pct:.2f}",
-                    "clock_gfx_mhz": s.clock_gfx_mhz,
-                    "clock_mem_mhz": s.clock_mem_mhz,
-                    "pcie_tx_mbs": f"{s.pcie_tx_mbs:.2f}",
-                    "pcie_rx_mbs": f"{s.pcie_rx_mbs:.2f}",
-                    "enc_util": f"{s.enc_util:.1f}",
-                    "dec_util": f"{s.dec_util:.1f}",
-                    "process_count": len(s.processes),
-                })
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=fieldnames)
+        writer.writeheader()
+        for s in snaps:
+            writer.writerow({
+                "timestamp": f"{s.timestamp:.3f}",
+                "gpu_index": s.gpu_index,
+                "gpu_name": sanitize_csv_cell(s.gpu_name),
+                "pstate": sanitize_csv_cell(s.pstate),
+                "gpu_util": f"{s.gpu_util:.1f}",
+                "mem_ctrl_util": f"{s.mem_ctrl_util:.1f}",
+                "vram_used_mib": f"{s.vram_used_mib:.1f}",
+                "vram_total_mib": f"{s.vram_total_mib:.1f}",
+                "vram_pct": f"{s.vram_pct:.2f}",
+                "temp_c": f"{s.temp_c:.1f}",
+                "fan_pct": f"{s.fan_pct:.1f}",
+                "power_draw_w": f"{s.power_draw_w:.2f}",
+                "power_limit_w": f"{s.power_limit_w:.2f}",
+                "power_pct": f"{s.power_pct:.2f}",
+                "clock_gfx_mhz": s.clock_gfx_mhz,
+                "clock_mem_mhz": s.clock_mem_mhz,
+                "pcie_tx_mbs": f"{s.pcie_tx_mbs:.2f}",
+                "pcie_rx_mbs": f"{s.pcie_rx_mbs:.2f}",
+                "enc_util": f"{s.enc_util:.1f}",
+                "dec_util": f"{s.dec_util:.1f}",
+                "process_count": len(s.processes),
+            })
+        _atomic_write_text(filepath, buf.getvalue())
 
     def export_json(self, filepath: str):
         data = [asdict(s) for s in self.snapshots]
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        _atomic_write_text(filepath, json.dumps(data, indent=2))
 
 
 class GpuTelemetryEngine:
@@ -710,6 +764,8 @@ class GpuTelemetryEngine:
             proc_map[pid]["vram_mib"] = max(float(proc_map[pid]["vram_mib"]), mib)
 
     def _inspect_pid(self, pid: int) -> Tuple[str, str, str]:
+        if not isinstance(pid, int) or pid <= 0:
+            return "unknown", "unknown", "user"
         proc_dir = f"/proc/{pid}"
         name = f"pid-{pid}"
         cmdline = ""
@@ -722,13 +778,15 @@ class GpuTelemetryEngine:
                     self._uid_cache[uid] = pwd.getpwuid(uid).pw_name
                 except Exception:
                     self._uid_cache[uid] = str(uid)
-            user = self._uid_cache[uid]
+            user = _CTRL_CHARS_RE.sub("", self._uid_cache[uid]) or str(uid)
         except Exception:
             pass
 
         try:
             with open(f"{proc_dir}/comm", "r", encoding="utf-8", errors="replace") as f:
-                name = f.read().strip() or name
+                comm_val = _CTRL_CHARS_RE.sub("", f.read(128)).strip()
+                if comm_val:
+                    name = comm_val
         except Exception:
             pass
 
@@ -736,12 +794,17 @@ class GpuTelemetryEngine:
             with open(f"{proc_dir}/cmdline", "rb") as f:
                 raw = f.read(512)
                 if raw:
-                    parts = [p.decode("utf-8", errors="replace") for p in raw.split(b"\x00") if p]
+                    parts = [
+                        _CTRL_CHARS_RE.sub(" ", p.decode("utf-8", errors="replace")).strip()
+                        for p in raw.split(b"\x00")
+                        if p
+                    ]
+                    parts = [p for p in parts if p]
                     if parts:
                         exe_base = os.path.basename(parts[0])
                         if exe_base:
                             name = exe_base
-                        cmdline = " ".join(parts)
+                        cmdline = " ".join(parts)[:300]
         except Exception:
             pass
 
@@ -865,14 +928,16 @@ class GpuTelemetryEngine:
     @staticmethod
     def _safe_float(val: str, default: float = 0.0) -> float:
         try:
-            return float(val)
+            res = float(val)
+            return res if math.isfinite(res) else default
         except Exception:
             return default
 
     @staticmethod
     def _safe_int(val: str, default: int = 0) -> int:
         try:
-            return int(float(val))
+            res = float(val)
+            return int(res) if math.isfinite(res) else default
         except Exception:
             return default
 

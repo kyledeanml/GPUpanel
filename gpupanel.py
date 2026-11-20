@@ -12,7 +12,7 @@ import signal
 import subprocess
 import sys
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 sys.dont_write_bytecode = True
 import gi
@@ -1049,12 +1049,12 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
         # 4. Sidebar hardware summary & channel readouts
         self.lbl_hw_summary.set_markup(
             f"<span font_family='monospace' size='small'>"
-            f"<b>Model:</b>  {GLib.markup_escape_text(spec.name)}\n"
-            f"<b>Driver:</b> {spec.driver_version} (CUDA {spec.cuda_version})\n"
-            f"<b>VBIOS:</b>  {spec.vbios_version}\n"
-            f"<b>Bus ID:</b> {spec.bus_id} (Gen{snap.pcie_gen} x{snap.pcie_width})\n"
+            f"<b>Model:</b>  {GLib.markup_escape_text(str(spec.name))}\n"
+            f"<b>Driver:</b> {GLib.markup_escape_text(str(spec.driver_version))} (CUDA {GLib.markup_escape_text(str(spec.cuda_version))})\n"
+            f"<b>VBIOS:</b>  {GLib.markup_escape_text(str(spec.vbios_version))}\n"
+            f"<b>Bus ID:</b> {GLib.markup_escape_text(str(spec.bus_id))} (Gen{snap.pcie_gen} x{snap.pcie_width})\n"
             f"<b>VRAM:</b>   {snap.vram_total_mib:.0f} MiB ({snap.vram_total_mib / 1024.0:.0f} GiB)\n"
-            f"<b>TDP:</b>    {snap.power_limit_w:.0f} W | P-State: <span foreground='#00f0ff'><b>{snap.pstate}</b></span>"
+            f"<b>TDP:</b>    {snap.power_limit_w:.0f} W | P-State: <span foreground='#00f0ff'><b>{GLib.markup_escape_text(str(snap.pstate))}</b></span>"
             f"</span>"
         )
 
@@ -1075,7 +1075,7 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
 
         # 6. Status bar
         self.st_gpu.set_markup(
-            f"<span foreground='#00f0ff' weight='bold'>GPU {snap.gpu_index}:</span> {GLib.markup_escape_text(spec.name)} [{snap.pstate}]"
+            f"<span foreground='#00f0ff' weight='bold'>GPU {snap.gpu_index}:</span> {GLib.markup_escape_text(str(spec.name))} [{GLib.markup_escape_text(str(snap.pstate))}]"
         )
         self.st_core.set_text(f"Core: {snap.gpu_util:.0f}% (MemBus {snap.mem_ctrl_util:.0f}%)")
         self.st_vram.set_text(
@@ -1390,18 +1390,81 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
             cb = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
             cb.set_text(txt, -1)
 
+    PROTECTED_PROCESS_NAMES = {
+        "xorg",
+        "xwayland",
+        "cinnamon",
+        "cinnamon-session",
+        "systemd",
+        "dbus-daemon",
+        "lightdm",
+        "gdm",
+        "gdm3",
+        "init",
+    }
+
+    @classmethod
+    def validate_terminable_pid(cls, pid: int, proc_name: str = "") -> Tuple[bool, str]:
+        """
+        Verify that a PID is safe for the user to send SIGTERM to:
+        - Must be a positive integer > 1 and not GPUpanel's own PID.
+        - Must not be a protected display/session process (Xorg, cinnamon, systemd, etc.).
+        - Must exist in /proc and be owned by the current effective user.
+        """
+        if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 1:
+            return False, f"Refusing to signal reserved or process-group PID ({pid})."
+        if pid == os.getpid():
+            return False, "Refusing to terminate GPUpanel's own process."
+
+        base_name = os.path.basename((proc_name or "").strip()).lower()
+        if base_name in cls.PROTECTED_PROCESS_NAMES:
+            return False, f"Refusing to terminate critical system/display process '{proc_name}'."
+
+        proc_dir = f"/proc/{pid}"
+        try:
+            st = os.stat(proc_dir)
+        except OSError:
+            return False, f"Process {pid} is no longer running."
+
+        if st.st_uid != os.getuid():
+            return False, f"Process {pid} is owned by another user (UID {st.st_uid})."
+
+        try:
+            with open(f"{proc_dir}/comm", "r", encoding="utf-8", errors="replace") as f:
+                comm_name = f.read(128).strip().lower()
+                if comm_name in cls.PROTECTED_PROCESS_NAMES:
+                    return False, f"Refusing to terminate critical system/display process '{comm_name}'."
+        except OSError:
+            pass
+
+        return True, "OK"
+
     def _on_terminate_process_clicked(self, _btn):
         pid = self._get_selected_pid()
         if pid is None:
             return
-        if pid in (1, os.getpid()):
+        sel = self.proc_tree.get_selection()
+        model, it = sel.get_selected()
+        proc_name = str(model.get_value(it, 2)) if it is not None else ""
+        allowed, reason = self.validate_terminable_pid(pid, proc_name)
+        if not allowed:
+            err = Gtk.MessageDialog(
+                transient_for=self,
+                flags=0,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.OK,
+                text=f"Cannot terminate PID {pid}",
+            )
+            err.format_secondary_text(reason)
+            err.run()
+            err.destroy()
             return
         dlg = Gtk.MessageDialog(
             transient_for=self,
             flags=0,
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.YES_NO,
-            text=f"Terminate GPU Process PID {pid}?",
+            text=f"Terminate GPU Process PID {pid} ({proc_name})?",
         )
         dlg.format_secondary_text(
             f"This will send SIGTERM to process {pid}. System display servers (Xorg/cinnamon) should not be terminated."
@@ -1410,6 +1473,9 @@ class GpuPanelWindow(Gtk.ApplicationWindow):
         dlg.destroy()
         if resp == Gtk.ResponseType.YES:
             try:
+                allowed_now, reason_now = self.validate_terminable_pid(pid, proc_name)
+                if not allowed_now:
+                    raise PermissionError(reason_now)
                 os.kill(pid, signal.SIGTERM)
                 GLib.timeout_add(300, lambda: (self._poll_once(), False)[1])
             except Exception as e:
