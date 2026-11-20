@@ -1,0 +1,56 @@
+{
+    "desklet-width": {
+        "type": "spinbutton",
+        "default": 360,
+        "min": 200,
+        "max": 900,
+        "step": 10,
+        "units": "px",
+        "description": "Desklet Width (px)"
+    },
+    "desklet-height": {
+        "type": "spinbutton",
+        "default": 180,
+        "min": 100,
+        "max": 600,
+        "step": 10,
+        "units": "px",
+        "description": "Desklet Height (px)"
+    },
+    "scale-size": {
+        "type": "scale",
+        "default": 1.0,
+        "min": 0.5,
+        "max": 2.5,
+        "step": 0.05,
+        "description": "Overall Scale Multiplier (or drag bottom-right corner / Ctrl+Scroll)"
+    },
+    "refresh-interval": {
+        "type": "spinbutton",
+        "default": 1,
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "units": "seconds",
+        "description": "Telemetry refresh interval"
+    },
+    "duration": {
+        "type": "spinbutton",
+        "default": 60,
+        "min": 20,
+        "max": 300,
+        "step": 10,
+        "units": "seconds",
+        "description": "Graph history duration"
+    },
+    "show-vram-line": {
+        "type": "checkbox",
+        "default": true,
+        "description": "Overlay VRAM allocation line (Emerald)"
+    },
+    "show-power-line": {
+        "type": "checkbox",
+        "default": true,
+        "description": "Overlay Power draw line (Violet)"
+    }
+}

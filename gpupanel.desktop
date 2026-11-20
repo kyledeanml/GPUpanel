@@ -1,0 +1,21 @@
+[Desktop Entry]
+Name=GPUpanel
+Comment=NVIDIA GPU resource graph workstation, Cinnamon panel applet, and desktop graph desklet in PythonPanel neon style
+GenericName=NVIDIA GPU Resource Monitor
+Exec=/home/bluechile/gpupanel/run.sh %F
+Icon=gpupanel
+Terminal=false
+Type=Application
+Categories=GTK;GNOME;System;Monitor;HardwareSettings;Utility;
+StartupNotify=true
+StartupWMClass=gpupanel
+Keywords=nvidia;gpu;cuda;vram;graph;telemetry;monitor;applet;desklet;gpupanel;rtx;
+Actions=MiniHUD;NewWindow;
+
+[Desktop Action MiniHUD]
+Name=Open Compact Floating Mini HUD
+Exec=/home/bluechile/gpupanel/run.sh --hud
+
+[Desktop Action NewWindow]
+Name=Open a New Window
+Exec=/home/bluechile/gpupanel/run.sh

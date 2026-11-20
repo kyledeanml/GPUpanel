@@ -1,0 +1,38 @@
+.gpupanel-applet-box {
+    padding: 0 6px;
+    spacing: 6px;
+}
+
+.gpupanel-applet-label {
+    font-family: monospace;
+    font-weight: bold;
+    font-size: 11px;
+    color: #e0f2fe;
+}
+
+.gpupanel-popup-card {
+    background-color: #0b0f19;
+    border: 1px solid rgba(0, 240, 255, 0.45);
+    border-radius: 8px;
+    padding: 10px 14px;
+    min-width: 310px;
+}
+
+.gpupanel-popup-title {
+    font-weight: bold;
+    font-size: 13px;
+    color: #00f0ff;
+}
+
+.gpupanel-popup-subtitle {
+    font-family: monospace;
+    font-size: 11px;
+    color: #38bdf8;
+}
+
+.gpupanel-popup-metric {
+    font-family: monospace;
+    font-size: 11.5px;
+    color: #f8fafc;
+    padding: 2px 0;
+}

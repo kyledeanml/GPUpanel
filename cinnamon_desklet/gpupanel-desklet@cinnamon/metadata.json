@@ -1,0 +1,9 @@
+{
+    "uuid": "gpupanel-desklet@cinnamon",
+    "name": "GPUpanel NVIDIA Resource Graph",
+    "description": "Live NVIDIA GPU Core, VRAM, Thermal & Power resource graph desklet in PythonPanel Dark Neon style",
+    "version": "1.0",
+    "max-instances": "5",
+    "prevent-decorations": true,
+    "author": "bluechile"
+}
